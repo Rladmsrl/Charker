@@ -188,3 +188,9 @@
 /* Apple Home accessory names */
 "Charker 160W 端口" = "Charker 160W 端口";
 "Charker 250W 端口" = "Charker 250W 端口";
+
+/* A25X7 wireless pads */
+"充电位 1" = "充电位 1";
+"充电位 2" = "充电位 2";
+"充电位 3" = "充电位 3";
+"蓝牙直连 · 实验性" = "蓝牙直连 · 实验性";

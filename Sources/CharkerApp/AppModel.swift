@@ -400,9 +400,21 @@ final class AppModel: ObservableObject {
     /// Whether this install has a real charger it can reconnect to quickly.
     /// The simulated peripheral is deliberately never stored here.
     var hasRememberedCharger: Bool {
-        activeProduct == .a2345
-            ? hasStoredA2345Authentication
-            : !preferences.savedChargers.isEmpty || store.peripheralID != nil
+        switch activeProduct {
+        case .a2345:
+            return hasStoredA2345Authentication
+        case .a25x7:
+            return !preferences.savedChargers.rememberedIDs(for: .a25x7).isEmpty
+        case .a2687:
+            if !preferences.savedChargers.rememberedIDs(for: .a2687).isEmpty { return true }
+            // The legacy single-charger key, unless that peripheral was later
+            // saved as the wireless pad.
+            if let id = store.peripheralID,
+               preferences.savedChargers.charger(id)?.product != .a25x7 {
+                return true
+            }
+            return false
+        }
     }
 
     /// A fresh install cannot infer either the product or the desired data
@@ -414,10 +426,15 @@ final class AppModel: ObservableObject {
 
     nonisolated static func product(for preferences: Preferences) -> ChargerProduct {
         if preferences.demoMode { return preferences.demoProduct }
-        return preferences.connectionMode == "cloud" ? .a2345 : .a2687
+        switch preferences.connectionMode {
+        case "cloud": return .a2345
+        case "a25x7": return .a25x7
+        default: return .a2687
+        }
     }
 
     var usesA2345: Bool { activeProduct == .a2345 }
+    var usesA25X7: Bool { activeProduct == .a25x7 }
 
     /// The A2345 broker provides a PEM certificate and matching RSA key. Both
     /// are converted to a Security identity in memory and released when the
@@ -471,7 +488,7 @@ final class AppModel: ObservableObject {
 
     /// Saved chargers in the order the list shows them: most recently used first.
     var savedChargersInUseOrder: [SavedCharger] {
-        preferences.savedChargers.reconnectOrder.compactMap {
+        preferences.savedChargers.rememberedIDs(for: activeProduct).compactMap {
             preferences.savedChargers.charger($0)
         }
     }
@@ -548,6 +565,9 @@ final class AppModel: ObservableObject {
     }
 
     var activeStatusDetail: String {
+        if usesA25X7, case .scanning = snapshot.phase {
+            return L10n.text("正在搜索无线充电座")
+        }
         guard usesA2345 else { return snapshot.statusDetail }
         if a2345Snapshot.isDemo {
             return L10n.text("模拟数据")
@@ -578,6 +598,7 @@ final class AppModel: ObservableObject {
 
     var activeReading: ChargerReading? {
         if usesA2345 { return a2345Snapshot.reading }
+        if usesA25X7 { return snapshot.wirelessTelemetry.map(ChargerReading.init(a25x7:)) }
         return snapshot.telemetry.map(ChargerReading.init(a2687:))
     }
 
@@ -602,6 +623,16 @@ final class AppModel: ObservableObject {
         updated.initialSetupCompleted = true
         updated.demoMode = false
         updated.connectionMode = "bluetooth"
+        preferences = updated
+        selectedSection = .devices
+        browse()
+    }
+
+    func useWirelessPadConnection() {
+        var updated = preferences
+        updated.initialSetupCompleted = true
+        updated.demoMode = false
+        updated.connectionMode = "a25x7"
         preferences = updated
         selectedSection = .devices
         browse()
@@ -787,27 +818,35 @@ final class AppModel: ObservableObject {
         browseAfterNextSessionBuild = false
 
         var configuration = SessionConfiguration(clientID: store.clientID())
+        configuration.product = activeProduct == .a25x7 ? .a25x7 : .a2687
         // Simulator writes cannot affect hardware, so its port controls are
         // available immediately. Real-device writes still require the user's
         // explicit opt-in and retain every existing safety confirmation.
-        configuration.writesEnabled = preferences.demoMode || preferences.writesEnabled
+        // The pad has no confirmed switch, so this link stays read-only.
+        configuration.writesEnabled = configuration.product == .a25x7
+            ? false
+            : (preferences.demoMode || preferences.writesEnabled)
         configuration.ownerUserID = Self.effectiveOwnerID(preferences.ownerUserID)
         configuration.pollInterval = .seconds(max(3, preferences.pollSeconds))
-        let saved = preferences.savedChargers.reconnectOrder
+        let saved = preferences.savedChargers.rememberedIDs(for: configuration.product)
         configuration.rememberedPeripherals = preferences.demoMode ? [] : saved
 
         let transport: ChargerTransport
         if preferences.demoMode {
-            // The review fixture starts in the same readable display state as
-            // the verified hardware so every reversible screen control can be
-            // explored, not just the animated wattage dashboard.
             let device = MockA2687Device()
-            device.firmwareVersion = "v0.0.5.2"
-            device.screenTimeout = .oneMinute
-            device.screenBrightness = 70
-            device.screenOrientation = .up
-            device.gyroscopeEnabled = true
-            device.chargingMode = .standard
+            if configuration.product == .a25x7 {
+                device.wirelessPads = true
+            } else {
+                // The review fixture starts in the same readable display state as
+                // the verified hardware so every reversible screen control can be
+                // explored, not just the animated wattage dashboard.
+                device.firmwareVersion = "v0.0.5.2"
+                device.screenTimeout = .oneMinute
+                device.screenBrightness = 70
+                device.screenOrientation = .up
+                device.gyroscopeEnabled = true
+                device.chargingMode = .standard
+            }
             transport = MockChargerTransport(device: device, lively: true)
         } else {
             transport = CoreBluetoothTransport(fileLog: fileLog)
@@ -818,7 +857,16 @@ final class AppModel: ObservableObject {
         )
         self.session = session
 
-        let preferred = preferences.demoMode ? nil : (store.peripheralID ?? saved.first)
+        let preferred: UUID? = {
+            guard !preferences.demoMode else { return nil }
+            if let current = store.peripheralID, saved.contains(current) { return current }
+            if configuration.product == .a2687,
+               let current = store.peripheralID,
+               preferences.savedChargers.charger(current) == nil {
+                return current
+            }
+            return saved.first
+        }()
         // A remembered charger is safe to reconnect automatically. With no
         // remembered identity, discovery stays a picker: auto-attaching the
         // first plausible advertisement makes the onboarding vanish and can
@@ -880,7 +928,10 @@ final class AppModel: ObservableObject {
            let id = snapshot.peripheralID, !forgottenChargers.contains(id) {
             var chargers = preferences.savedChargers
             chargers.recordConnection(
-                id: id, serialNumber: snapshot.deviceInfo.serialNumber, at: Date()
+                id: id,
+                serialNumber: snapshot.deviceInfo.serialNumber,
+                product: snapshot.monitoredProduct == .a25x7 ? .a25x7 : .a2687,
+                at: Date()
             )
             if chargers != preferences.savedChargers {
                 preferences.savedChargers = chargers
@@ -2941,12 +2992,15 @@ final class AppModel: ObservableObject {
             return
         }
         if !preferences.demoMode,
-           old.savedChargers.reconnectOrder != preferences.savedChargers.reconnectOrder {
-            let order = preferences.savedChargers.reconnectOrder
+           old.savedChargers.rememberedIDs(for: activeProduct)
+            != preferences.savedChargers.rememberedIDs(for: activeProduct) {
+            let order = preferences.savedChargers.rememberedIDs(for: activeProduct)
             Task { await session?.setRememberedPeripherals(order) }
         }
         if old.writesEnabled != preferences.writesEnabled {
-            let enabled = preferences.demoMode || preferences.writesEnabled
+            let enabled = activeProduct == .a25x7
+                ? false
+                : (preferences.demoMode || preferences.writesEnabled)
             Task { await session?.setWritesEnabled(enabled) }
         }
         if old.pollSeconds != preferences.pollSeconds {
@@ -3029,6 +3083,22 @@ final class AppModel: ObservableObject {
                 figureDigits: figureDigits
             )
         }
+        if usesA25X7 {
+            guard snapshot.phase.isLive, snapshot.wirelessTelemetry != nil else {
+                return StatusTemplate.offlineTitle(snapshot)
+            }
+            return MenuBarConfig.render(
+                preferences.menuBarItems,
+                reading: activeReading,
+                stateLabel: activeStatusLabel,
+                deviceName: activeDisplayName,
+                defaultDecimals: preferences.decimals,
+                hideIdlePorts: preferences.hideIdlePorts,
+                portNicknames: preferences.portNicknames,
+                figureDigits: figureDigits,
+                product: .a25x7
+            )
+        }
         guard snapshot.phase.isLive, snapshot.telemetry != nil else {
             return StatusTemplate.offlineTitle(snapshot)
         }
@@ -3053,6 +3123,15 @@ final class AppModel: ObservableObject {
                 reading: a2345Snapshot.reading,
                 defaultDecimals: preferences.decimals,
                 hideIdlePorts: preferences.hideIdlePorts
+            )
+        }
+        if usesA25X7 {
+            return MenuBarConfig.widestFigure(
+                preferences.menuBarItems,
+                reading: activeReading,
+                defaultDecimals: preferences.decimals,
+                hideIdlePorts: preferences.hideIdlePorts,
+                product: .a25x7
             )
         }
         return MenuBarConfig.widestFigure(
@@ -3121,6 +3200,9 @@ final class AppModel: ObservableObject {
     /// indistinguishable from observations of the user's real charger.
     var displayedEnergyHistory: EnergyHistory {
         if preferences.demoMode { return demoEnergyHistory }
+        // Pad samples stay in the live session chart. They are not written
+        // into the 160 W archive, which indexes ports as USB-C slots.
+        if activeProduct == .a25x7 { return EnergyHistory() }
         return usesA2345 ? a2345EnergyHistory : energyHistory
     }
 
@@ -3313,6 +3395,7 @@ final class AppModel: ObservableObject {
     // MARK: - Energy history
 
     private func recordEnergy(from snapshot: SessionSnapshot) {
+        if !snapshot.isDemo, snapshot.monitoredProduct == .a25x7 { return }
         guard let sample = snapshot.history.last,
               sample.at != lastRecordedEnergyAt else { return }
         lastRecordedEnergyAt = sample.at
@@ -3420,7 +3503,12 @@ final class AppModel: ObservableObject {
                     let c2 = total * c2Share
                     let firstThree = [c1, c2, max(0, total - c1 - c2)]
                     let perPort: [Double]
-                    if product == .a2345 {
+                    let recordedTotal: Double
+                    if product == .a25x7 {
+                        let padTotal = max(0.6, min(12, total / 16))
+                        perPort = [padTotal * 0.55, padTotal * 0.32, padTotal * 0.13]
+                        recordedTotal = padTotal
+                    } else if product == .a2345 {
                         // Keep the fixture honest for the six-port product. The
                         // extra ports take a small, stable share and all six are
                         // normalised back to the same total wattage.
@@ -3431,12 +3519,14 @@ final class AppModel: ObservableObject {
                         ]
                         let scale = total / unscaled.reduce(0, +)
                         perPort = unscaled.map { $0 * scale }
+                        recordedTotal = total
                     } else {
                         perPort = firstThree
+                        recordedTotal = total
                     }
                     history.record(EnergyMeasurement(
                         at: at,
-                        totalWatts: total,
+                        totalWatts: recordedTotal,
                         perPortWatts: perPort
                     ), calendar: calendar)
                 }
@@ -3735,7 +3825,7 @@ final class AppModel: ObservableObject {
     /// not picked its charger yet.
     private func reconcileMatter() {
         let wanted = isRunning && preferences.matterEnabled && !preferences.demoMode
-            && preferences.initialSetupCompleted
+            && preferences.initialSetupCompleted && activeProduct.supportsMatter
             ? MatterAccessoryLayout(product: activeProduct)
             : nil
         guard wanted != matterLayout else { return }

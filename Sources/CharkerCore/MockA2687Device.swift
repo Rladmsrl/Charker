@@ -50,6 +50,15 @@ public final class MockA2687Device: @unchecked Sendable {
     public var gyroscopeEnabled: Bool?
     /// `AA`. Nil leaves the field out, as older fixtures did.
     public var chargingMode: ChargingMode?
+    /// When set, telemetry is three wireless pads instead of USB-C ports.
+    /// The handshake replies stay the A2687 fixture so the shared ladder runs.
+    public var wirelessPads = false {
+        didSet {
+            if wirelessPads { productName = "A25X7" }
+        }
+    }
+    /// Watts for pads A2, A3, A4 while ``wirelessPads`` is set.
+    public var padWatts: [Double] = [2.85, 1.42, 0]
 
     private let privateKey = P256.KeyAgreement.PrivateKey()
     private var sessionKeys: A2687Crypto.Keys?
@@ -227,6 +236,7 @@ public final class MockA2687Device: @unchecked Sendable {
     }
 
     private func telemetryPayload() -> [UInt8] {
+        if wirelessPads { return wirelessTelemetryPayload() }
         var fields: [TLV] = [TLV(id: A2687.Field.a1, value: [A2687.sessionAction])]
         for port in A2687.Port.allCases {
             let state = ports[port.rawValue]
@@ -268,6 +278,26 @@ public final class MockA2687Device: @unchecked Sendable {
             fields.append(TLV(id: A2687.Field.aa, value: TypedValue.u8(chargingMode.code).encoded))
         }
         return [0x00] + TLVCodec.encode(fields)
+    }
+
+    /// Status byte plus pad TLV. Each value keeps the `0x04` type prefix the
+    /// A25X7 decoder requires. Intermediate voltage and current words stay 0;
+    /// their units are not confirmed.
+    private func wirelessTelemetryPayload() -> [UInt8] {
+        let keys: [UInt8] = [0xA2, 0xA3, 0xA4]
+        var body: [UInt8] = []
+        for (index, key) in keys.enumerated() {
+            let watts = index < padWatts.count ? max(0, padWatts[index]) : 0
+            let centi = UInt16(clamping: Int((watts * 100).rounded()))
+            let value: [UInt8] = [
+                0x04, watts > 0 ? 0x01 : 0x00, 0x00, 0x00, 0x00, 0x00,
+                UInt8(centi & 0xFF), UInt8(centi >> 8),
+            ]
+            body.append(key)
+            body.append(UInt8(value.count))
+            body.append(contentsOf: value)
+        }
+        return [0x00] + body
     }
 
     private func ack(_ frame: Frame, _ fields: [TLV], keys: A2687Crypto.Keys) -> [UInt8] {

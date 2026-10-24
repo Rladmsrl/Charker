@@ -99,6 +99,10 @@ public struct HandshakeEngine: @unchecked Sendable {
     /// way to derive it locally — see `docs/real-device-findings.md`.
     private let ownerUserID: String?
     private let now: @Sendable () -> Date
+    /// Replaces the A2687 read/bind/trigger burst once the ladder reaches
+    /// `sessionReady`. Nil keeps that burst. The wireless pad sends its own
+    /// subscribe instead; the handshake up to `0x0027` stays the same.
+    public var sessionOpeningOverride: (@Sendable (Date) -> [OutgoingMessage])?
 
     public init(
         clientID: String,
@@ -257,6 +261,9 @@ public struct HandshakeEngine: @unchecked Sendable {
     /// start reporting; the first two alone leave it silent.
     private func sessionOpeningMessages() -> [OutgoingMessage] {
         let now = self.now()
+        if let sessionOpeningOverride {
+            return sessionOpeningOverride(now)
+        }
         return [
             CommandEncoder.readAll(at: now),
             CommandEncoder.realtimeProbe(countryCode: countryCode, ownerUserID: ownerUserID, at: now),

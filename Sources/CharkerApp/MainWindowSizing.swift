@@ -19,6 +19,7 @@ enum MainWindowSizing {
         switch product {
         case .a2687: return CGSize(width: 890, height: 600)
         case .a2345: return CGSize(width: 940, height: 600)
+        case .a25x7: return CGSize(width: 820, height: 560)
         }
     }
 
@@ -28,6 +29,7 @@ enum MainWindowSizing {
         switch product {
         case .a2687: return CGSize(width: 969, height: 840)
         case .a2345: return CGSize(width: 1120, height: 910)
+        case .a25x7: return CGSize(width: 900, height: 720)
         }
     }
 

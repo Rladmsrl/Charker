@@ -47,6 +47,9 @@ struct EnergyHistoryView: View {
 
     private var history: EnergyHistory { model.displayedEnergyHistory }
     private var activePorts: [ChargerPortID] { model.activeProduct.ports }
+    private func portTitle(_ port: ChargerPortID) -> String {
+        port.readoutLabel(for: model.activeProduct)
+    }
     private var powerHistory: [PowerSample] { model.activePowerHistory }
     /// The live chart draws the model's thinned series (about 180 points
     /// instead of 600, times one line per port); statistics stay on the raw
@@ -622,7 +625,11 @@ struct EnergyHistoryView: View {
                 }
             }
 
-            PortEnergyRail(values: summary.perPortWh, ports: activePorts)
+            PortEnergyRail(
+                values: summary.perPortWh,
+                ports: activePorts,
+                product: model.activeProduct
+            )
 
             LazyVGrid(
                 columns: [GridItem(.adaptive(minimum: 76), spacing: Space.m)],
@@ -635,7 +642,7 @@ struct EnergyHistoryView: View {
                         Circle()
                             .fill(portColor(index))
                             .frame(width: 6, height: 6)
-                        Text("\(port.label) \(shortEnergy(portEnergy(summary.perPortWh, at: index)))")
+                        Text("\(portTitle(port)) \(shortEnergy(portEnergy(summary.perPortWh, at: index)))")
                             .font(Typo.micro)
                             .foregroundStyle(Palette.textTertiary)
                             .lineLimit(1)
@@ -899,6 +906,7 @@ struct EnergyHistoryView: View {
         LivePowerChart(
             history: plottedPowerHistory,
             ports: activePorts,
+            product: model.activeProduct,
             axisMaximum: powerChartMaximum,
             expandsVertically: expandsVertically,
             selection: selection
@@ -945,7 +953,7 @@ struct EnergyHistoryView: View {
             chartLegendDot("总输出", color: Palette.accent, solid: true)
             ForEach(activePorts) { port in
                 chartLegendDot(
-                    port.label,
+                    portTitle(port),
                     color: portColor(port.rawValue),
                     solid: false
                 )
@@ -1320,7 +1328,7 @@ struct EnergyHistoryView: View {
         guard let dominant = candidates.max(by: { $0.energy < $1.energy }),
               summary.energyWh > 0 else { return L10n.text("暂无") }
         let percentage = Int((dominant.energy / summary.energyWh * 100).rounded())
-        return "\(dominant.port.label) · \(percentage)%"
+        return "\(portTitle(dominant.port)) · \(percentage)%"
     }
 
     private func averageJourneyEnergy(_ summary: EnergyHistorySummary) -> String {
@@ -1432,7 +1440,7 @@ struct EnergyHistoryView: View {
                 )
                 .cornerRadius(renderedPortSlices.count > 1 ? 2 : 0)
                 .foregroundStyle(portColor(slice.index))
-                .accessibilityLabel(Text(slice.port.label))
+                .accessibilityLabel(Text(portTitle(slice.port)))
                 .accessibilityValue(Text("\(slice.percentage)%"))
             }
             .chartLegend(.hidden)
@@ -1473,7 +1481,7 @@ struct EnergyHistoryView: View {
                     Circle()
                         .fill(portColor(slice.index))
                         .frame(width: 6, height: 6)
-                    Text(slice.port.label)
+                    Text(portTitle(slice.port))
                         .font(Typo.micro)
                         .foregroundStyle(Palette.textSecondary)
                     Text(shortEnergy(slice.energyWh))
@@ -1681,6 +1689,7 @@ struct EnergyHistoryView: View {
                                         record: record,
                                         isActive: model.activeIsLive && history.activeSession?.id == record.id,
                                         ports: activePorts,
+                                        product: model.activeProduct,
                                         fitsOneLine: rowFitsOneLine
                                     )
                                     .equatable()
@@ -2277,6 +2286,7 @@ private struct ChartHoverScope<Content: View>: View {
 private struct LivePowerChart: View, Equatable {
     let history: [PowerSample]
     let ports: [ChargerPortID]
+    let product: ChargerProduct
     /// Resolved by the page from the scale preference, the product and the
     /// raw history's peak, so a new range choice or a new peak still redraws.
     let axisMaximum: Int
@@ -2288,6 +2298,7 @@ private struct LivePowerChart: View, Equatable {
         lhs.axisMaximum == rhs.axisMaximum
             && lhs.expandsVertically == rhs.expandsVertically
             && lhs.ports == rhs.ports
+            && lhs.product == rhs.product
             && lhs.history.count == rhs.history.count
             && lhs.history.last?.at == rhs.history.last?.at
             && lhs.history.last?.total == rhs.history.last?.total
@@ -2315,7 +2326,7 @@ private struct LivePowerChart: View, Equatable {
             let index = port.rawValue
             return PortLine(
                 index: index,
-                label: port.label,
+                label: port.readoutLabel(for: product),
                 stroke: StrokeStyle(
                     lineWidth: 1,
                     lineCap: .round,
@@ -2565,6 +2576,7 @@ private enum EnergyPortStyle {
 private struct PortEnergyRail: View {
     let values: [Double]
     let ports: [ChargerPortID]
+    let product: ChargerProduct
 
     private var activePorts: [ChargerPortID] {
         ports.filter { value(for: $0) > 0.000_001 }
@@ -2610,7 +2622,7 @@ private struct PortEnergyRail: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text("端口能量占比"))
         .accessibilityValue(Text(
-            ports.map { L10n.format("%@ %.1f 瓦时", $0.label, value(for: $0)) }
+            ports.map { L10n.format("%@ %.1f 瓦时", $0.readoutLabel(for: product), value(for: $0)) }
                 .joined(separator: L10n.text("，"))
         ))
     }
@@ -2623,11 +2635,12 @@ private struct PortEnergyRail: View {
 }
 
 /// Compared by hand because `@State` and `@Environment` rule out synthesis;
-/// everything the row draws comes from these four inputs.
+/// everything the row draws comes from these inputs.
 private struct SessionRecordRow: View, Equatable {
     let record: EnergySessionRecord
     let isActive: Bool
     let ports: [ChargerPortID]
+    let product: ChargerProduct
     /// Decided by the page from its width (see `sessionRowFitsOneLine`):
     /// `ViewThatFits` built both layouts for each of up to 16 rows per pass.
     let fitsOneLine: Bool
@@ -2638,6 +2651,7 @@ private struct SessionRecordRow: View, Equatable {
         lhs.isActive == rhs.isActive
             && lhs.fitsOneLine == rhs.fitsOneLine
             && lhs.ports == rhs.ports
+            && lhs.product == rhs.product
             && lhs.record == rhs.record
     }
 
@@ -2691,7 +2705,7 @@ private struct SessionRecordRow: View, Equatable {
                         .foregroundStyle(Palette.textPrimary)
                     if isActive { Chip(text: L10n.text("进行中"), tone: .accent) }
                 }
-                PortEnergyRail(values: record.perPortWh, ports: ports)
+                PortEnergyRail(values: record.perPortWh, ports: ports, product: product)
                     .frame(maxWidth: 170)
             }
         }

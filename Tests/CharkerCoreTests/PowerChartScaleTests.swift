@@ -49,6 +49,8 @@ final class PowerChartScaleTests: XCTestCase {
     }
 
     func testAxisTicksIncludeZeroAndTheDisplayedMaximum() {
+        XCTAssertEqual(PowerChartScale.options(for: .a25x7), [5, 10, 15, 30])
+        XCTAssertEqual(PowerChartScale.axisValues(maximum: 15), [0, 5, 10, 15])
         XCTAssertEqual(PowerChartScale.axisValues(maximum: 50), [0, 10, 20, 30, 40, 50])
         XCTAssertEqual(PowerChartScale.axisValues(maximum: 160), [0, 40, 80, 120, 160])
         XCTAssertEqual(PowerChartScale.axisValues(maximum: 250), [0, 50, 100, 150, 200, 250])

@@ -1,11 +1,30 @@
 import XCTest
 import A2345Protocol
+import A25X7Protocol
 @testable import CharkerCore
 
 final class ChargerProductTests: XCTestCase {
     func testA2687KeepsOriginalThreeStablePortSlots() {
         XCTAssertEqual(ChargerProduct.a2687.ports, [.c1, .c2, .c3])
         XCTAssertEqual(ChargerProduct.a2687.ratedWatts, 160)
+    }
+
+    func testA25X7ReusesThreeSlotsWithoutElectricalUnits() throws {
+        XCTAssertEqual(ChargerProduct.a25x7.ports, [.c1, .c2, .c3])
+        XCTAssertEqual(ChargerProduct.a25x7.ratedWatts, 15)
+        XCTAssertFalse(ChargerProduct.a25x7.supportsMatter)
+        let telemetry = try A25X7Telemetry.decode(parameters: [
+            0xA2: Data([0x04, 0x01, 0x3A, 0x02, 0x32, 0x00, 0x1D, 0x01]),
+            0xA3: Data([0x04, 0x01, 0xC6, 0x02, 0x14, 0x00, 0x8E, 0x00]),
+            0xA4: Data([0x04, 0x00, 0xF4, 0x01, 0x00, 0x00, 0x00, 0x00]),
+        ])
+        let reading = ChargerReading(a25x7: telemetry)
+        XCTAssertEqual(reading.ports.map(\.port), [.c1, .c2, .c3])
+        XCTAssertEqual(reading.ports.map(\.voltage), [0, 0, 0])
+        XCTAssertEqual(reading.ports.map(\.current), [0, 0, 0])
+        XCTAssertEqual(reading.totalPower, 4.27, accuracy: 0.000_001)
+        XCTAssertEqual(reading.ports.map(\.isDelivering), [true, true, false])
+        XCTAssertEqual(reading.activePortCount, 2)
     }
 
     func testA2345UsesSixPhysicalPortsInWireOrder() {

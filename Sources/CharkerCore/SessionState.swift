@@ -1,3 +1,4 @@
+import A25X7Protocol
 import A2687Protocol
 import Foundation
 
@@ -117,6 +118,11 @@ public struct SessionSnapshot: Sendable, Equatable {
     public var advertisedName: String?
     public var peripheralID: UUID?
     public var telemetry: ChargerTelemetry?
+    /// Complete three-pad snapshot. Nil until A2, A3, and A4 have all arrived.
+    public var wirelessTelemetry: A25X7Telemetry?
+    /// Product this snapshot's link was opened for. Drives names and which
+    /// reading is live; the default keeps older call sites on the 160 W path.
+    public var monitoredProduct: ChargerProduct = .a2687
     /// Rolling power history for the chart, oldest first.
     public var history: [PowerSample] = []
     /// Everything the radio has seen this session, newest signal first.
@@ -139,7 +145,12 @@ public struct SessionSnapshot: Sendable, Equatable {
     public var isDemo = false
     public init() {}
 
-    public var lastUpdate: Date? { telemetry?.receivedAt }
+    public var lastUpdate: Date? {
+        if monitoredProduct == .a25x7 {
+            return wirelessTelemetry?.updatedAt ?? telemetry?.receivedAt
+        }
+        return telemetry?.receivedAt
+    }
 
     public var statusLabel: String { phase.shortLabel }
     public var statusDetail: String { phase.detail }
@@ -149,15 +160,40 @@ public struct SessionSnapshot: Sendable, Equatable {
     /// marketing name; anything unrecognised is shown verbatim rather than lied
     /// about. Nil means nothing is connected and nothing has been advertised.
     public var displayName: String? {
+        if monitoredProduct == .a25x7 {
+            if let product = deviceInfo.productName, !product.isEmpty,
+               !Self.isGenericWirelessName(product) {
+                return product
+            }
+            if deviceInfo.productName != nil || advertisedName != nil || phase.isLive {
+                return ChargerProduct.a25x7.displayName
+            }
+            return nil
+        }
         if let product = deviceInfo.productName, !product.isEmpty {
             return product == "Charging" ? "Anker Prime 160W" : product
         }
         return advertisedName
     }
 
+    /// Names that are not a specific device. "Charging" is the A2687's
+    /// internal string; mapping it to the 160 W marketing name would mislabel
+    /// the pad.
+    private static func isGenericWirelessName(_ name: String) -> Bool {
+        switch name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "charging", "a25x7", "anker prime wireless":
+            return true
+        default:
+            return false
+        }
+    }
+
     /// Total is a local sum over the three ports; the A2687 exposes no trustworthy
     /// device-side total. Nil when nothing has been received yet.
-    public var totalPower: Double? { telemetry?.totalPower }
+    public var totalPower: Double? {
+        if monitoredProduct == .a25x7 { return wirelessTelemetry?.totalWatts }
+        return telemetry?.totalPower
+    }
 
     /// Whether a picker scan may take over the radio right now.
     ///

@@ -151,9 +151,11 @@ struct RootView: View {
 
     private var deviceTitle: String {
         if model.preferences.demoMode {
-            return model.activeProduct == .a2345
-                ? L10n.text("模拟 Prime 250W")
-                : L10n.text("模拟 Prime 160W")
+            switch model.activeProduct {
+            case .a2345: return L10n.text("模拟 Prime 250W")
+            case .a25x7: return L10n.text("模拟无线充电座")
+            case .a2687: return L10n.text("模拟 Prime 160W")
+            }
         }
         let fallback = model.hasRememberedCharger
             ? L10n.text("未连接")
@@ -194,6 +196,8 @@ struct RootView: View {
             case .dashboard:
                 if model.usesA2345 {
                     A2345DashboardView(model: model)
+                } else if model.usesA25X7 {
+                    A25X7DashboardView(model: model)
                 } else {
                     DashboardView(model: model)
                 }

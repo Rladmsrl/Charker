@@ -63,17 +63,22 @@ struct DevicesView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Space.l) {
+                if model.usesA25X7 {
+                    experimentalPadNote
+                }
                 if showsFirstConnectionFlow {
                     firstConnectionCard
                     nearbyCard
                 } else {
                     if snapshot.isDemo { demoModeCard }
                     currentCard
-                    if !snapshot.isDemo, !model.preferences.savedChargers.isEmpty {
+                    if !snapshot.isDemo, !model.savedChargersInUseOrder.isEmpty {
                         savedChargersCard
                     }
-                    deviceSettingsCard
-                    modelScreenCard
+                    if !model.usesA25X7 {
+                        deviceSettingsCard
+                        modelScreenCard
+                    }
                     if !snapshot.isDemo {
                         accountCard
                         nearbyCard
@@ -139,12 +144,30 @@ struct DevicesView: View {
     /// Product and real/demo choices belong to InitialSetupView. Once the user
     /// reaches this page, keep the card focused on the Bluetooth task they chose
     /// and offer one quiet route back when the model itself was wrong.
+    private var experimentalPadNote: some View {
+        SlateCard {
+            VStack(alignment: .leading, spacing: Space.xs) {
+                Text(L10n.text("实验性"))
+                    .font(Typo.label)
+                    .foregroundStyle(Palette.accentText)
+                Text(L10n.text("A25X7 只读取功率。屏幕亮度、充电模式和开关都还没有足够的协议证据。"))
+                    .font(Typo.caption)
+                    .foregroundStyle(Palette.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
     private var firstConnectionCard: some View {
         SlateCard {
             HStack(alignment: .top, spacing: Space.xl) {
                 ZStack {
                     RadarPulse(diameter: 92, active: snapshot.phase.isBusy)
-                    ChargerFigure(height: 52)
+                    if model.usesA25X7 {
+                        WirelessPadGlyph()
+                    } else {
+                        ChargerFigure(height: 52)
+                    }
                 }
                 .frame(width: 100, height: 104)
                 .background {
@@ -158,10 +181,12 @@ struct DevicesView: View {
 
                 VStack(alignment: .leading, spacing: Space.m) {
                     VStack(alignment: .leading, spacing: Space.xs) {
-                        Text("连接第一台充电器")
+                        Text(model.usesA25X7 ? L10n.text("连接无线充电座") : "连接第一台充电器")
                             .font(Typo.heading)
                             .foregroundStyle(Palette.textPrimary)
-                        Text("无需在 macOS 蓝牙设置里配对。")
+                        Text(model.usesA25X7
+                            ? L10n.text("实验性蓝牙连接。无需在 macOS 蓝牙设置里配对，请先退出官方 App。")
+                            : "无需在 macOS 蓝牙设置里配对。")
                             .font(Typo.caption)
                             .foregroundStyle(Palette.textTertiary)
                             .cjkParagraph(11, target: 1.5)
@@ -169,9 +194,14 @@ struct DevicesView: View {
                     }
 
                     VStack(alignment: .leading, spacing: Space.s) {
-                        connectionStep(1, "给 Anker Prime 充电器通电")
+                        connectionStep(1, model.usesA25X7 ? "给无线充电座通电" : "给 Anker Prime 充电器通电")
                         connectionStep(2, "退出可能正在占用它的官方 Anker App")
-                        connectionStep(3, "在下方选择带“充电器”标记的设备并点“连接”")
+                        connectionStep(
+                            3,
+                            model.usesA25X7
+                                ? "在下方选择无线充电座并点“连接”"
+                                : "在下方选择带“充电器”标记的设备并点“连接”"
+                        )
                     }
 
                     HStack(spacing: Space.s) {
@@ -1675,7 +1705,7 @@ private struct SavedChargerRow: View {
     /// Unnamed rows read as the product; the serial on the line below is what
     /// tells two of them apart.
     private var title: String {
-        charger.nickname.isEmpty ? ChargerProduct.a2687.displayName : charger.nickname
+        charger.nickname.isEmpty ? charger.product.displayName : charger.nickname
     }
 
     private var detail: String {
@@ -1721,7 +1751,7 @@ private struct SavedChargerRow: View {
             Text("给这台充电器起个名字")
                 .font(Typo.label)
                 .foregroundStyle(Palette.textPrimary)
-            TextField("", text: $draft, prompt: Text(verbatim: ChargerProduct.a2687.displayName))
+            TextField("", text: $draft, prompt: Text(verbatim: charger.product.displayName))
                 .textFieldStyle(.roundedBorder)
                 .onSubmit(commitRename)
                 .onChange(of: draft) { _, value in

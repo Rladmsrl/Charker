@@ -1,3 +1,4 @@
+import A25X7Protocol
 import A2687Protocol
 import Foundation
 
@@ -61,6 +62,9 @@ public struct SessionConfiguration: Sendable {
     /// ``ChargerSession/requireSessionReady()`` and their own consent instead —
     /// see ``ChargerSession/requireWritable()``.
     public var writesEnabled = false
+    /// BLE product this link monitors. A25X7 keeps the A2687 handshake and
+    /// swaps the opening command plus the telemetry decoder.
+    public var product: ChargerProduct = .a2687
 
     public init(
         clientID: String,
@@ -140,6 +144,12 @@ public actor ChargerSession {
     /// Field ids last seen on an opcode that carried no port data, so the polled
     /// replies are reported once each instead of once every few seconds.
     private var fieldOnlyShapes: [UInt16: String] = [:]
+    /// Last accepted A25X7 parameters. Partial notifications stay here until
+    /// all three pads can be decoded. Reset with each handshake so a new link
+    /// cannot finish a snapshot from the previous link's pads.
+    private var wirelessCache = A25X7ReportCache()
+    /// Unencrypted pad telemetry is ignored. Say so once per link.
+    private var notedUnencryptedWirelessReport = false
     /// The newest ``DeviceSettings`` this link has produced, carried forward onto
     /// the frames that omit it.
     ///
@@ -170,6 +180,7 @@ public actor ChargerSession {
         self.diagnostics = diagnostics
         self.snapshot.writesEnabled = configuration.writesEnabled
         self.snapshot.isDemo = transport is MockChargerTransport
+        self.snapshot.monitoredProduct = configuration.product
     }
 
     public var current: SessionSnapshot { snapshot }
@@ -191,8 +202,11 @@ public actor ChargerSession {
     }
 
     public func setWritesEnabled(_ enabled: Bool) {
-        config.writesEnabled = enabled
-        snapshot.writesEnabled = enabled
+        // The pad has no confirmed on/off command. A preference carried over
+        // from the 160 W charger must not arm writes on this link.
+        let allowed = config.product == .a25x7 ? false : enabled
+        config.writesEnabled = allowed
+        snapshot.writesEnabled = allowed
         publish()
     }
 
@@ -348,6 +362,9 @@ public actor ChargerSession {
         snapshot.advertisedName = nil
         snapshot.telemetry = nil
         snapshot.history = []
+        snapshot.wirelessTelemetry = nil
+        wirelessCache.reset()
+        notedUnencryptedWirelessReport = false
         snapshot.isStale = false
         snapshot.authRejected = false
         snapshot.warning = nil
@@ -738,6 +755,18 @@ public actor ChargerSession {
         }
     }
 
+    private func recordWirelessHistory(_ telemetry: A25X7Telemetry) {
+        let sample = PowerSample(
+            at: telemetry.updatedAt,
+            total: telemetry.totalWatts,
+            perPort: telemetry.pads.map(\.watts)
+        )
+        snapshot.history.append(sample)
+        if snapshot.history.count > Self.historyLimit {
+            snapshot.history.removeFirst(snapshot.history.count - Self.historyLimit)
+        }
+    }
+
     /// Roughly 20 minutes at the default poll interval.
     private static let historyLimit = 600
 
@@ -826,6 +855,8 @@ public actor ChargerSession {
         // change; report each opcode's field shape again rather than assuming
         // the last connection's answer still holds.
         fieldOnlyShapes.removeAll()
+        wirelessCache.reset()
+        notedUnencryptedWirelessReport = false
         // The settings snapshot belonged to the link that just ended. A new
         // ladder re-reads it within a couple of poll ticks, and until it does,
         // "not read yet" is the honest answer — the alternative is presenting
@@ -844,6 +875,11 @@ public actor ChargerSession {
             countryCode: config.countryCode,
             ownerUserID: config.ownerUserID
         )
+        if config.product == .a25x7 {
+            engine.sessionOpeningOverride = { @Sendable _ in
+                [A25X7Session.subscribeMessage()]
+            }
+        }
         let first = engine.start()
         self.engine = engine
         set(phase: .negotiating(engine.stage))
@@ -918,6 +954,10 @@ public actor ChargerSession {
         }
 
         self.engine = engine
+        if config.product == .a25x7 {
+            ingestWireless(frame, payload: payload)
+            return
+        }
         // Decode every frame, then let `hasPortData` decide whether it may touch
         // the live readings. The old `decode` returned nil for a payload with no
         // A5/A6/A7 in it, so a `0x020A` bind reply or a `0x020B` trigger ack was
@@ -946,6 +986,47 @@ public actor ChargerSession {
             if engine.stage == .sessionReady { set(phase: .monitoring) } else { publish() }
         } else {
             noteFieldsOnly(decoded)
+        }
+        resume(opcode: frame.opcode, with: payload)
+    }
+
+    /// Accepts an encrypted pad report (`0x0300`, or a `0x0200` that carries
+    /// the same parameters) only after the session key exists. Cleartext is
+    /// dropped. Partial reports stay in the cache and do not replace the last
+    /// complete reading.
+    private func ingestWireless(_ frame: Frame, payload: Payload) {
+        let isPadReport = frame.opcode == A25X7.reportOpcode || frame.opcode == A25X7.subscribeOpcode
+        guard engine?.stage == .sessionReady, isPadReport else {
+            resume(opcode: frame.opcode, with: payload)
+            return
+        }
+        guard frame.isEncrypted else {
+            if !notedUnencryptedWirelessReport {
+                notedUnencryptedWirelessReport = true
+                diagnostics.record("RX", "A25X7 忽略未加密遥测")
+            }
+            resume(opcode: frame.opcode, with: payload)
+            return
+        }
+        var report: [UInt8: Data] = [:]
+        report.reserveCapacity(payload.fields.count)
+        for field in payload.fields where report[field.id] == nil {
+            report[field.id] = Data(field.value)
+        }
+        wirelessCache.merge(report)
+        do {
+            guard let telemetry = try wirelessCache.telemetry(at: Date()) else {
+                resume(opcode: frame.opcode, with: payload)
+                return
+            }
+            snapshot.wirelessTelemetry = telemetry
+            snapshot.isStale = false
+            snapshot.lastError = nil
+            if snapshot.warning != nil { snapshot.warning = nil }
+            recordWirelessHistory(telemetry)
+            set(phase: .monitoring)
+        } catch {
+            diagnostics.record("RX!", "A25X7 遥测无法解码 \(error)")
         }
         resume(opcode: frame.opcode, with: payload)
     }
@@ -1487,6 +1568,12 @@ public actor ChargerSession {
     /// `pollTask` does not unwind a tick already inside this function.
     private func poll() async {
         guard engine?.stage == .sessionReady, pollHolds.isEmpty else { return }
+        if config.product == .a25x7 {
+            // The pad's live stream is armed by `A1 01 21`, not by the 160 W
+            // bind/trigger pair. Resend that subscribe; do not append `FE`.
+            await dispatch([A25X7Session.subscribeMessage()])
+            return
+        }
         pollTick += 1
         var messages = [
             CommandEncoder.realtimeProbe(
@@ -1511,7 +1598,10 @@ public actor ChargerSession {
     private func checkStaleness() {
         checkSilentSession()
         checkFruitlessScan()
-        guard let received = snapshot.telemetry?.receivedAt else { return }
+        let received = config.product == .a25x7
+            ? snapshot.wirelessTelemetry?.updatedAt
+            : snapshot.telemetry?.receivedAt
+        guard let received else { return }
         let stale = Date().timeIntervalSince(received) > config.staleAfter
         guard stale != snapshot.isStale else { return }
         snapshot.isStale = stale
@@ -1521,8 +1611,11 @@ public actor ChargerSession {
     /// The charger can accept the encrypted session and then answer nothing at all.
     /// Saying "已连接" in that state would be a lie, so name what actually happened.
     private func checkSilentSession() {
+        let waitingForFirstReading = config.product == .a25x7
+            ? snapshot.wirelessTelemetry == nil
+            : snapshot.telemetry == nil
         guard let readyAt = sessionReadyAt,
-              snapshot.telemetry == nil,
+              waitingForFirstReading,
               engine?.stage == .sessionReady,
               Date().timeIntervalSince(readyAt) > Self.silentSessionTimeout else { return }
         sessionReadyAt = nil

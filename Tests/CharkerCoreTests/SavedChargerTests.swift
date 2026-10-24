@@ -77,6 +77,29 @@ final class SavedChargerTests: XCTestCase {
         XCTAssertEqual(chargers[0].nickname, "")
     }
 
+    func testAMissingProductDecodesAsThe160WCharger() throws {
+        let json = """
+        [{"id":"\(home.uuidString)","nickname":"家里","lastConnectedAt":1000}]
+        """
+        let decoded = try XCTUnwrap(SavedCharger.decodeList(json))
+        XCTAssertEqual(decoded.first?.product, .a2687)
+    }
+
+    func testWirelessPadRoundTripsAndDoesNotCollapseIntoAnotherProduct() throws {
+        var chargers = [
+            SavedCharger(id: home, serialNumber: "SHARED", product: .a2687),
+        ]
+        chargers.recordConnection(
+            id: office, serialNumber: "SHARED", product: .a25x7,
+            at: Date(timeIntervalSince1970: 50)
+        )
+        XCTAssertEqual(chargers.map(\.product), [.a2687, .a25x7])
+        let decoded = try XCTUnwrap(SavedCharger.decodeList(SavedCharger.encodeList(chargers)))
+        XCTAssertEqual(decoded.map(\.product), [.a2687, .a25x7])
+        XCTAssertEqual(chargers.rememberedIDs(for: .a25x7), [office])
+        XCTAssertEqual(chargers.rememberedIDs(for: .a2687), [home])
+    }
+
     func testForgetRemovesOnlyThatCharger() {
         var chargers = [SavedCharger(id: home), SavedCharger(id: office)]
         chargers.forget(home)

@@ -349,6 +349,13 @@ struct AppleHomeView: View {
 
     var body: some View {
         SettingsPage(title: "Apple 家庭") {
+            if !model.activeProduct.supportsMatter {
+                Text(L10n.text("这款无线充电座还不能接入 Apple 家庭。目前只能查看三个充电位的功率。"))
+                    .font(Typo.caption)
+                    .foregroundStyle(Palette.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if model.activeProduct.supportsMatter {
             SettingsGroup(footnote: isOn ? "Mac 睡眠或 Charker 退出后，「家庭」里会显示「无响应」。" : nil) {
                 HStack(spacing: Space.m) {
                     MatterGlyphTile(symbol: "homekit", lit: isOn && isReachable)
@@ -384,6 +391,7 @@ struct AppleHomeView: View {
                     showsInstruction: !whole.status.isWaitingForPairing,
                     matter: ports
                 )
+            }
             }
         }
     }

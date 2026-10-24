@@ -183,9 +183,26 @@ struct MenuBarReadout: View {
     private var ports: some View {
         if model.usesA2345 {
             a2345Ports
+        } else if model.usesA25X7 {
+            wirelessPadPorts
         } else {
             a2687Ports
         }
+    }
+
+    private var wirelessPadPorts: some View {
+        VStack(spacing: Space.xxs) {
+            ForEach(ChargerProduct.a25x7.ports) { port in
+                WirelessPadStrip(
+                    port: port,
+                    reading: model.activeReading?.port(port),
+                    ceiling: ratedWatts,
+                    stale: model.activeIsStale
+                )
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(Text(ChargerProduct.a25x7.displayName))
     }
 
     private var a2687Ports: some View {
@@ -253,6 +270,42 @@ struct MenuBarReadout: View {
                 .buttonStyle(GhostButtonStyle())
                 .help("退出 Charker（不影响充电器输出）")
         }
+    }
+}
+
+private struct WirelessPadStrip: View {
+    let port: ChargerPortID
+    let reading: ChargerPortReading?
+    let ceiling: Double
+    let stale: Bool
+
+    private var watts: Double {
+        guard let reading, reading.isOn else { return 0 }
+        return reading.power
+    }
+
+    private var delivering: Bool { !stale && (reading?.isDelivering ?? false) }
+
+    var body: some View {
+        HStack(spacing: Space.s) {
+            Text(port.readoutLabel(for: .a25x7))
+                .font(Typo.micro)
+                .foregroundStyle(delivering ? Palette.accentText : Palette.textTertiary)
+                .frame(width: 64, alignment: .leading)
+            PowerRail(
+                watts: watts,
+                ceiling: ceiling,
+                isDelivering: delivering,
+                dimmed: stale
+            )
+            .frame(maxWidth: 120)
+            Text(reading == nil ? "—" : L10n.format("%.2f", watts) + " W")
+                .font(.numeral(12, .semibold))
+                .foregroundStyle(Palette.textPrimary)
+                .frame(width: 64, alignment: .trailing)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(Text(port.readoutLabel(for: .a25x7)))
     }
 }
 

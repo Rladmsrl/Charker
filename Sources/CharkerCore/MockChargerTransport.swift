@@ -49,7 +49,8 @@ public final class MockChargerTransport: ChargerTransport, @unchecked Sendable {
         device.reset()
         lock.unlock()
 
-        let charger = DiscoveredCharger(id: identifier, name: "\(A2687.namePrefix)-MOCK", rssi: -52)
+        let name = device.wirelessPads ? "A25X7-MOCK" : "\(A2687.namePrefix)-MOCK"
+        let charger = DiscoveredCharger(id: identifier, name: name, rssi: -52)
         continuation.yield(.discovered(charger))
         continuation.yield(.connected(charger))
         continuation.yield(.ready(maxWriteLength: 244, withResponse: true))
@@ -154,6 +155,15 @@ public final class MockChargerTransport: ChargerTransport, @unchecked Sendable {
     /// seconds later would demonstrate the opposite of the truth.
     private func advanceScenario() {
         tick += 1
+        if device.wirelessPads {
+            let t = Double(tick) * 2
+            device.padWatts = [
+                ((2.7 + 0.18 * sin(t / 9)) * 100).rounded() / 100,
+                ((1.35 + 0.12 * sin(t / 7 + 1)) * 100).rounded() / 100,
+                t.truncatingRemainder(dividingBy: 48) < 10 ? 0.42 : 0,
+            ]
+            return
+        }
         let t = Double(tick) * 2  // seconds of demo time at the 2 s cadence
 
         var c1 = device.ports[0]

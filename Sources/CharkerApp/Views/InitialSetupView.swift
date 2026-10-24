@@ -126,13 +126,14 @@ struct InitialSetupView: View {
                 .font(.ui(26, .semibold))
                 .foregroundStyle(Palette.textPrimary)
 
-            HStack(alignment: .top, spacing: Space.l) {
-                ProductChoiceButton(product: .a2687) {
-                    choose(.a2687)
-                }
-                ProductChoiceButton(product: .a2345) {
-                    choose(.a2345)
-                }
+            LazyVGrid(
+                columns: [GridItem(.adaptive(minimum: 250), spacing: Space.l)],
+                alignment: .leading,
+                spacing: Space.l
+            ) {
+                ProductChoiceButton(product: .a2687) { choose(.a2687) }
+                ProductChoiceButton(product: .a2345) { choose(.a2345) }
+                ProductChoiceButton(product: .a25x7) { choose(.a25x7) }
             }
         }
     }
@@ -151,9 +152,9 @@ struct InitialSetupView: View {
                     SetupRouteButton(
                         title: L10n.text("连接真实设备"),
                         detail: realConnectionDetail(for: product),
-                        symbol: product == .a2687
-                            ? "antenna.radiowaves.left.and.right"
-                            : "wifi",
+                        symbol: product == .a2345
+                            ? "wifi"
+                            : "antenna.radiowaves.left.and.right",
                         primary: true
                     ) {
                         connectRealDevice(product)
@@ -225,6 +226,8 @@ struct InitialSetupView: View {
         case .a2345:
             A2345ProductStage(active: true, height: height * 0.82)
                 .padding(.horizontal, Space.m)
+        case .a25x7:
+            WirelessPadGlyph()
         }
     }
 
@@ -238,6 +241,7 @@ struct InitialSetupView: View {
         switch product {
         case .a2687: model.useBluetoothConnection()
         case .a2345: model.useA2345CloudConnection()
+        case .a25x7: model.useWirelessPadConnection()
         }
     }
 
@@ -247,6 +251,8 @@ struct InitialSetupView: View {
             return L10n.text("无需在 macOS 蓝牙设置里配对。")
         case .a2345:
             return L10n.text("使用绑定设备的 Anker 账号登录；请先在官方 App 中完成 Wi-Fi 配网。")
+        case .a25x7:
+            return L10n.text("实验性蓝牙连接。无需在 macOS 蓝牙设置里配对，请先退出官方 App。")
         }
     }
 
@@ -254,6 +260,7 @@ struct InitialSetupView: View {
         switch product {
         case .a2687: return L10n.text("3 个 USB-C 端口 · 最高 160 W")
         case .a2345: return L10n.text("4 个 USB-C + 2 个 USB-A · 最高 250 W")
+        case .a25x7: return L10n.text("三个无线充电位 · 实验性支持")
         }
     }
 
@@ -339,6 +346,8 @@ private struct ProductChoiceButton: View {
         case .a2345:
             A2345ProductStage(active: true, height: 86)
                 .padding(.horizontal, Space.m)
+        case .a25x7:
+            WirelessPadGlyph()
         }
     }
 
@@ -346,6 +355,7 @@ private struct ProductChoiceButton: View {
         switch product {
         case .a2687: return L10n.text("3 个 USB-C 端口 · 最高 160 W")
         case .a2345: return L10n.text("4 个 USB-C + 2 个 USB-A · 最高 250 W")
+        case .a25x7: return L10n.text("三个无线充电位 · 实验性支持")
         }
     }
 }
