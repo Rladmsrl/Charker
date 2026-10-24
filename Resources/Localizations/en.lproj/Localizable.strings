@@ -748,6 +748,7 @@
 "模拟" = "Simulation";
 "模拟 Prime 160W" = "Simulate Prime 160W";
 "模拟 Prime 250W" = "Simulate Prime 250W";
+"模拟无线充电座" = "Simulate Wireless Pad";
 "点击端口筛选单口曲线" = "Click a port to filter its power curve";
 "离线" = "Offline";
 "账号下有 %d 台 A2345；当前连接第一台。设备切换将在后续版本加入。" = "This account has %d A2345 chargers. Charker connected to the first one; device selection is planned for a later release.";
@@ -991,3 +992,18 @@
 "1 到 1435 分钟。" = "1 to 1,435 minutes.";
 "有设备插到设为 0 W 的端口时，切回 AI 模式。" = "When a device is plugged into a port set to 0 W, switch back to AI mode.";
 "先打开时钟屏保。" = "Turn on the clock screensaver first.";
+
+/* A25X7 wireless pad */
+"三个无线充电位 · 实验性支持" = "Three wireless pads · experimental";
+"实验性蓝牙连接。无需在 macOS 蓝牙设置里配对，请先退出官方 App。" = "Experimental Bluetooth connection. No pairing in macOS Bluetooth settings. Quit the official app first.";
+"正在搜索无线充电座" = "Searching for the wireless charging pad";
+"连接后这里显示三个充电位的功率。" = "Pad power appears here after you connect.";
+"输出中" = "Delivering";
+"本次连接的功率" = "Power during this connection";
+"这款无线充电座还不能接入 Apple 家庭。目前只能查看三个充电位的功率。" = "This wireless pad cannot join Apple Home yet. You can watch power on its three pads.";
+"A25X7 只读取功率。屏幕亮度、充电模式和开关都还没有足够的协议证据。" = "A25X7 only reads power. Screen brightness, charge mode, and switches do not have enough protocol evidence yet.";
+"给无线充电座通电" = "Power on the wireless charging pad";
+"在下方选择无线充电座并点“连接”" = "Select the wireless charging pad below and choose Connect";
+"实验性" = "Experimental";
+"三个充电位" = "Three pads";
+"连接无线充电座" = "Connect the wireless charging pad";

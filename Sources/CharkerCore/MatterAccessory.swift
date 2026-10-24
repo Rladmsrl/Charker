@@ -66,6 +66,7 @@ public struct MatterAccessoryLayout: Sendable, Equatable {
         switch product {
         case .a2687: targets = A2687.Port.allCases.map(Target.a2687)
         case .a2345: targets = A2345PortGroup.allCases.map(Target.a2345)
+        case .a25x7: targets = []
         }
     }
 
@@ -75,6 +76,7 @@ public struct MatterAccessoryLayout: Sendable, Equatable {
         switch (product, kind) {
         case (.a2687, .grouped): return "Charker 160W"
         case (.a2345, .grouped): return "Charker 250W"
+        case (.a25x7, _): return "Charker Wireless"
         case (.a2687, .bridged): return L10n.text("Charker 160W 端口", table: "Core")
         case (.a2345, .bridged): return L10n.text("Charker 250W 端口", table: "Core")
         }
@@ -87,6 +89,7 @@ public struct MatterAccessoryLayout: Sendable, Equatable {
         switch product {
         case .a2687: family = "a2687"
         case .a2345: family = "a2345"
+        case .a25x7: family = "a25x7"
         }
         return kind == .grouped ? family : family + "-ports"
     }

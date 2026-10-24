@@ -189,6 +189,7 @@ public enum MenuBarConfig {
         portNicknames: [String] = [],
         placeholder: String = "—",
         figureDigits: Int = 1,
+        product: ChargerProduct? = nil,
         bundle: Bundle = .main
     ) -> String? {
         func format(_ watts: Double) -> String {
@@ -209,7 +210,8 @@ public enum MenuBarConfig {
                   let port = ChargerPortID(rawValue: index),
                   reading?.product.ports.contains(port) != false else { return nil }
             let nickname = index < portNicknames.count ? portNicknames[index] : ""
-            let name = item.label ?? (nickname.isEmpty ? port.label : nickname)
+            let labeled = reading?.product ?? product ?? .a2687
+            let name = item.label ?? (nickname.isEmpty ? port.readoutLabel(for: labeled) : nickname)
             guard let value = reading?.port(port) else {
                 return prefixed(placeholder, with: item.showsPortName ? name : nil)
             }
@@ -305,6 +307,7 @@ public enum MenuBarConfig {
         hideIdlePorts: Bool,
         portNicknames: [String] = [],
         figureDigits: Int = 1,
+        product: ChargerProduct? = nil,
         bundle: Bundle = .main
     ) -> String {
         struct Run {
@@ -335,6 +338,7 @@ public enum MenuBarConfig {
                 hideIdlePorts: hideIdlePorts,
                 portNicknames: portNicknames,
                 figureDigits: figureDigits,
+                product: product,
                 bundle: bundle
             ) {
                 current.parts.append(text)
@@ -382,14 +386,15 @@ public enum MenuBarConfig {
         _ items: [MenuBarItem],
         reading: ChargerReading?,
         defaultDecimals: Int,
-        hideIdlePorts: Bool
+        hideIdlePorts: Bool,
+        product: ChargerProduct? = nil
     ) -> Int {
         items.compactMap { item in
             bareFigure(item).flatMap {
                 display(
                     $0, reading: reading, stateLabel: "", deviceName: nil,
                     defaultDecimals: defaultDecimals, hideIdlePorts: hideIdlePorts,
-                    placeholder: ""
+                    placeholder: "", product: product
                 )
             }
         }.map(wholeDigits(of:)).max() ?? 0

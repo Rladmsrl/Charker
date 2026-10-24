@@ -35,6 +35,11 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
+同一许可下，A25X7 的功率解码对照了该仓库提交
+`10879567cb3f132ef2a056a58c6cb77ae48314e7` 中的 `SolixBLE/devices/maggo_3in1.py`
+与 `tests/test_devices.py`（作者 Harvey Lelliott）。Charker 重新实现了解码，只保留解密后的参数示例
+（三个充电位的类型、状态与功率字），不包含密钥、蓝牙地址或账号。
+
 ## Hyper-Beast/Anker_Prime_160W_WebBLE — 无显式许可证
 
 固定提交 `ad4355d8ea7630070059637f84c4ad245ac601b0`。

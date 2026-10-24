@@ -1,3 +1,4 @@
+import A25X7Protocol
 import A2687Protocol
 import CoreBluetooth
 import Foundation
@@ -60,7 +61,7 @@ public final class CoreBluetoothTransport: NSObject, ChargerTransport, @unchecke
     private let notifyUUID = CBUUID(string: A2687.notifyCharacteristic)
 
     /// Advertised-name fragments seen on Anker Prime hardware, lowercased.
-    private let nameHints = ["ashdjw", "ashd", "anker", "prime", "a2687", "solix"]
+    private let nameHints = ["ashdjw", "ashd", "anker", "prime", "a2687", "solix"] + A25X7.nameHints
 
     /// Product type `B405`, the official device-table entry for the A2687.
     private static let productTypeA2687: [UInt8] = [0xB4, 0x05]

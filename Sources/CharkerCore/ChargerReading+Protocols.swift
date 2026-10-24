@@ -1,4 +1,5 @@
 import A2345Protocol
+import A25X7Protocol
 import A2687Protocol
 import Foundation
 
@@ -83,5 +84,21 @@ public extension ChargerReading {
             )
         }
         self.init(product: .a2687, ports: ports, receivedAt: telemetry.receivedAt)
+    }
+
+    public init(a25x7 telemetry: A25X7Telemetry) {
+        let slots = ChargerProduct.a25x7.ports
+        let ports = telemetry.pads.enumerated().compactMap { index, pad -> ChargerPortReading? in
+            guard slots.indices.contains(index) else { return nil }
+            return ChargerPortReading(
+                port: slots[index],
+                statusCode: pad.status,
+                voltage: 0,
+                current: 0,
+                power: pad.watts,
+                infersDeliveryFromPower: true
+            )
+        }
+        self.init(product: .a25x7, ports: ports, receivedAt: telemetry.updatedAt)
     }
 }

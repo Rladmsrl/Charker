@@ -15,6 +15,8 @@ public enum PowerChartScale {
             [50, 100, 160]
         case .a2345:
             [50, 100, 150, 200, 250]
+        case .a25x7:
+            [5, 10, 15, 30]
         }
     }
 
@@ -60,6 +62,8 @@ public enum PowerChartScale {
         let safeMaximum = max(1, maximum)
         let step: Int
         switch safeMaximum {
+        case ...15: step = 5
+        case ...30: step = 10
         case ...50: step = 10
         case ...100: step = 25
         case 150: step = 50

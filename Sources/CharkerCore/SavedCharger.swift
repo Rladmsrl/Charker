@@ -1,6 +1,7 @@
 import Foundation
 
-/// A 160 W charger this Mac has monitored before.
+/// A BLE charger this Mac has monitored before. `product` separates a 160 W
+/// charger from a wireless pad that share this Mac's Bluetooth list.
 ///
 /// Several can be saved — one at home, one at the office — and the session
 /// reconnects to whichever of them is in range. Nothing here is secret: the
@@ -15,6 +16,9 @@ public struct SavedCharger: Codable, Sendable, Equatable, Identifiable {
     /// identifier changed (the system forgot it) rejoin its old entry, name and
     /// all, instead of appearing twice.
     public var serialNumber: String?
+    /// Family this entry was monitoring when it was saved. Missing values in
+    /// older lists are the 160 W charger.
+    public var product: ChargerProduct = .a2687
     public var lastConnectedAt: Date?
 
     /// Long enough for any real place name, short enough for the menu bar.
@@ -24,11 +28,13 @@ public struct SavedCharger: Codable, Sendable, Equatable, Identifiable {
         id: UUID,
         nickname: String = "",
         serialNumber: String? = nil,
+        product: ChargerProduct = .a2687,
         lastConnectedAt: Date? = nil
     ) {
         self.id = id
         self.nickname = Self.normalizedNickname(nickname)
         self.serialNumber = serialNumber
+        self.product = product
         self.lastConnectedAt = lastConnectedAt
     }
 
@@ -41,6 +47,7 @@ public struct SavedCharger: Codable, Sendable, Equatable, Identifiable {
             try container.decodeIfPresent(String.self, forKey: .nickname) ?? ""
         )
         serialNumber = try container.decodeIfPresent(String.self, forKey: .serialNumber)
+        product = try container.decodeIfPresent(ChargerProduct.self, forKey: .product) ?? .a2687
         lastConnectedAt = try container.decodeIfPresent(Date.self, forKey: .lastConnectedAt)
     }
 
@@ -49,9 +56,9 @@ public struct SavedCharger: Codable, Sendable, Equatable, Identifiable {
     /// same model still read differently.
     public var displayName: String {
         if !nickname.isEmpty { return nickname }
-        let product = ChargerProduct.a2687.displayName
-        guard let serialNumber, serialNumber.count >= 4 else { return product }
-        return "\(product) · \(serialNumber.suffix(4))"
+        let name = product.displayName
+        guard let serialNumber, serialNumber.count >= 4 else { return name }
+        return "\(name) · \(serialNumber.suffix(4))"
     }
 
     public static func normalizedNickname(_ raw: String) -> String {
@@ -83,29 +90,48 @@ public extension Array where Element == SavedCharger {
             .map(\.element.id)
     }
 
+    /// Reconnect targets for one family. An A2687 saved at home is not a
+    /// candidate while the session is looking for the wireless pad.
+    func rememberedIDs(for product: ChargerProduct) -> [UUID] {
+        filter { $0.product == product }.reconnectOrder
+    }
+
     /// Adds a charger that just reached live monitoring, or refreshes the one
     /// already saved. A different identifier carrying a known serial is the same
     /// charger after the system forgot it: it takes over that entry and keeps
-    /// the name the user gave it.
-    mutating func recordConnection(id: UUID, serialNumber: String?, at date: Date) {
+    /// the name the user gave it. The same serial on a different product is a
+    /// different device and is left alone.
+    mutating func recordConnection(
+        id: UUID,
+        serialNumber: String?,
+        product: ChargerProduct = .a2687,
+        at date: Date
+    ) {
         let serial = serialNumber?.trimmingCharacters(in: .whitespacesAndNewlines)
         let knownSerial = (serial?.isEmpty == false) ? serial : nil
         if let index = firstIndex(where: { $0.id == id }) {
             self[index].lastConnectedAt = date
+            self[index].product = product
             if let knownSerial { self[index].serialNumber = knownSerial }
             if let knownSerial,
-               let twin = firstIndex(where: { $0.id != id && $0.serialNumber == knownSerial }) {
+               let twin = firstIndex(where: {
+                   $0.id != id && $0.serialNumber == knownSerial && $0.product == product
+               }) {
                 if self[index].nickname.isEmpty { self[index].nickname = self[twin].nickname }
                 remove(at: twin)
             }
             return
         }
-        if let knownSerial, let twin = firstIndex(where: { $0.serialNumber == knownSerial }) {
+        if let knownSerial,
+           let twin = firstIndex(where: { $0.serialNumber == knownSerial && $0.product == product }) {
             self[twin].id = id
             self[twin].lastConnectedAt = date
+            self[twin].product = product
             return
         }
-        append(SavedCharger(id: id, serialNumber: knownSerial, lastConnectedAt: date))
+        append(SavedCharger(
+            id: id, serialNumber: knownSerial, product: product, lastConnectedAt: date
+        ))
     }
 
     mutating func rename(_ id: UUID, to nickname: String) {

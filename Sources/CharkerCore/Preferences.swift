@@ -92,6 +92,9 @@ public struct Preferences: Sendable, Equatable {
     /// not unexpectedly change the familiar 160 W charger's charts.
     public var a2687PowerChartMaximum = PowerChartScale.automatic
     public var a2345PowerChartMaximum = PowerChartScale.automatic
+    /// Separate from the 160 W chart so a few-watt pad does not inherit a
+    /// 160 W ceiling, and choosing 5 W here does not shrink the 160 W chart.
+    public var a25x7PowerChartMaximum = PowerChartScale.automatic
     /// ISO-style currency code and local retail rate used only for an estimated
     /// electricity cost. Zero means the optional estimate is not configured.
     public var energyCurrencyCode = Preferences.defaultEnergyCurrencyCode
@@ -164,6 +167,7 @@ public struct Preferences: Sendable, Equatable {
         switch product {
         case .a2687: a2687PowerChartMaximum
         case .a2345: a2345PowerChartMaximum
+        case .a25x7: a25x7PowerChartMaximum
         }
     }
 
@@ -172,6 +176,7 @@ public struct Preferences: Sendable, Equatable {
         switch product {
         case .a2687: a2687PowerChartMaximum = normalized
         case .a2345: a2345PowerChartMaximum = normalized
+        case .a25x7: a25x7PowerChartMaximum = normalized
         }
     }
 }
@@ -207,6 +212,7 @@ public final class PreferencesStore: @unchecked Sendable {
         static let dashboardEnergyScope = "dashboardEnergyScope"
         static let a2687PowerChartMaximum = "a2687PowerChartMaximum"
         static let a2345PowerChartMaximum = "a2345PowerChartMaximum"
+        static let a25x7PowerChartMaximum = "a25x7PowerChartMaximum"
         static let energyCurrencyCode = "energyCurrencyCode"
         static let energyPricePerKWh = "energyPricePerKWh"
         static let modelHomeTheta = "modelHomeCameraTheta"
@@ -264,7 +270,7 @@ public final class PreferencesStore: @unchecked Sendable {
             prefs.demoProduct = product
         }
         if let mode = defaults.string(forKey: Key.connectionMode),
-           ["bluetooth", "cloud"].contains(mode) {
+           ["bluetooth", "cloud", "a25x7"].contains(mode) {
             prefs.connectionMode = mode
         }
         prefs.a2345SelectedSerial = defaults.string(forKey: Key.a2345SelectedSerial) ?? ""
@@ -293,6 +299,12 @@ public final class PreferencesStore: @unchecked Sendable {
             prefs.a2345PowerChartMaximum = PowerChartScale.normalizedPreference(
                 defaults.integer(forKey: Key.a2345PowerChartMaximum),
                 for: .a2345
+            )
+        }
+        if defaults.object(forKey: Key.a25x7PowerChartMaximum) != nil {
+            prefs.a25x7PowerChartMaximum = PowerChartScale.normalizedPreference(
+                defaults.integer(forKey: Key.a25x7PowerChartMaximum),
+                for: .a25x7
             )
         }
         if let currency = defaults.string(forKey: Key.energyCurrencyCode),
@@ -374,6 +386,10 @@ public final class PreferencesStore: @unchecked Sendable {
         defaults.set(
             PowerChartScale.normalizedPreference(prefs.a2345PowerChartMaximum, for: .a2345),
             forKey: Key.a2345PowerChartMaximum
+        )
+        defaults.set(
+            PowerChartScale.normalizedPreference(prefs.a25x7PowerChartMaximum, for: .a25x7),
+            forKey: Key.a25x7PowerChartMaximum
         )
         defaults.set(
             Preferences.normalizedCurrencyCode(prefs.energyCurrencyCode)

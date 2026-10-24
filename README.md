@@ -1,7 +1,7 @@
 <div align="center">
   <img src="Resources/Screenshots/app-icon-rounded.png" width="128" alt="Charker 图标" />
   <h1>Charker</h1>
-  <p><strong>在 Mac 上查看和控制 Anker Prime 160W 与 250W。</strong></p>
+  <p><strong>在 Mac 上查看和控制 Anker Prime 160W、250W，以及实验性的无线充电座。</strong></p>
   <p>简体中文 · <a href="README_EN.md">English</a></p>
   <p>
     <a href="https://github.com/qzz0518/Charker/stargazers"><img src="https://img.shields.io/github/stars/qzz0518/Charker?style=flat-square" alt="GitHub Stars" /></a>
@@ -16,14 +16,16 @@
   <img src="Resources/Screenshots/overview.png" width="1100" alt="Charker 总览：实时功率、三维设备、端口状态与功率时间线" />
 </p>
 
-Charker 是 **Anker Prime 160W（A2687）** 和 **Anker Prime Charger 250W（A2345）** 的非官方 macOS 应用。160W 通过蓝牙直连，250W 用 Anker 账号经 Wi-Fi 云端连接。
+Charker 是 **Anker Prime 160W（A2687）**、**Anker Prime Charger 250W（A2345）** 和 **Anker Prime 无线充电座（A25X7，实验性）** 的非官方 macOS 应用。160W 和无线充电座通过蓝牙直连，250W 用 Anker 账号经 Wi-Fi 云端连接。
 
 > [!IMPORTANT]
 > Charker 是独立项目，与 Anker 无关联、未获其背书。读数已在 160W（蓝牙固件 `v0.0.5.2`）和 250W（固件 `2.1.1.6`）上实机验证。控制功能中，160W 的屏幕设置和 250W 的端口开关已实机验证，其余尚未实机验证。
+>
+> A25X7 只做实验性的蓝牙连接和三个充电位的实时功率。解码与订阅命令 `A1 01 21` 对照过公开的 SolixBLE 记录；**这一版 Charker 还没有在实机上验收**。屏幕亮度、充电模式和开关没有足够的协议证据，因此没有做。充电位只标成 1/2/3：公开记录对手机、手表和耳机的对应关系互相矛盾。
 
 ## 功能
 
-- **实时总览**：各端口的电压、电流和功率，3D 设备模型，功率曲线。
+- **实时总览**：各端口的电压、电流和功率，3D 设备模型，功率曲线。A25X7 显示三个充电位的功率和合计，不显示未经确认的电压、电流。
 - **菜单栏**：不开主窗口也能看总功率或单口功率，显示内容可以自定义。
 - **能耗与电费**：按天、周、月查看用电量和电费，可导出 CSV / JSON。
 - **设备控制**
@@ -49,13 +51,15 @@ brew install --cask qzz0518/tap/charker
 
 **250W（Wi-Fi）**：先在 Anker App 里绑定并配网，再在「设备与连接」里用同一个 Anker 账号登录。日本账号选 JP，中国大陆账号用手机验证码登录。
 
-两种型号控制端口前，都要先在「高级」里打开「允许端口开关」。
+**无线充电座 A25X7（蓝牙，实验性）**：先退出官方 App，再在首次设置里选择这款，于「设备与连接」中连接。如有提示，填入绑定它的 Anker 账号 ID。界面只显示充电位 1/2/3 的功率，暂不支持 Apple 家庭、屏幕亮度和充电模式。
+
+160W 和 250W 控制端口前，都要先在「高级」里打开「允许端口开关」。
 
 **Apple 家庭**：在「Apple 家庭」页打开「接入 Apple 家庭」，用 iPhone「家庭」App 扫二维码添加，提示未认证配件时选「仍然添加」。整台充电器（显示总功率）和每个端口各有一个二维码；两个都添加的话，「电力」里的全屋功率会把这台充电器算两遍。Mac 睡眠或 Charker 退出后，「家庭」里会显示「无响应」。同一时间只有 Charker 当前选中的充电器会在「家庭」里更新。
 
 ## 隐私
 
-- 160W 的数据走本机蓝牙；250W 的数据和控制经 Anker 云端加密传输。
+- 160W 和 A25X7 的数据走本机蓝牙；250W 的数据和控制经 Anker 云端加密传输。A25X7 的功率只留在本次连接的图上，不写入 160W 的能耗档案。
 - 「接入 Apple 家庭」默认关闭。打开后，端口开关和功率经本地网络加密发给你的「家庭」。
 - 能耗历史和设置只存在这台 Mac 上。没有 Charker 服务器，也不收集使用数据。
 - 不保存密码和验证码。250W 的登录令牌存在钥匙串里，退出登录即删除，官方 App 里的绑定不受影响。

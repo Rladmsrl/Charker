@@ -9,11 +9,13 @@ import Foundation
 public enum ChargerProduct: String, Codable, CaseIterable, Sendable, Equatable {
     case a2687 = "A2687"
     case a2345 = "A2345"
+    case a25x7 = "A25X7"
 
     public var displayName: String {
         switch self {
         case .a2687: return "Anker Prime 160W"
         case .a2345: return "Anker Prime 250W"
+        case .a25x7: return "Anker Prime Wireless"
         }
     }
 
@@ -21,13 +23,25 @@ public enum ChargerProduct: String, Codable, CaseIterable, Sendable, Equatable {
         switch self {
         case .a2687: return 160
         case .a2345: return 250
+        // Not a verified nameplate. Public pad captures are a few watts each.
+        // 15 W is only the menu-bar rail's full-scale mark so a 3 W pad does
+        // not paint the whole rail; charts promote when a sample exceeds them.
+        case .a25x7: return 15
         }
     }
 
     public var ports: [ChargerPortID] {
         switch self {
-        case .a2687: return [.c1, .c2, .c3]
-        case .a2345: return ChargerPortID.allCases
+        case .a2687, .a25x7: return [.c1, .c2, .c3]
+        case .a2345: return [.c1, .c2, .c3, .c4, .a1, .a2]
+        }
+    }
+
+    /// Apple Home needs a confirmed on/off command. The pad does not have one.
+    public var supportsMatter: Bool {
+        switch self {
+        case .a2687, .a2345: return true
+        case .a25x7: return false
         }
     }
 
@@ -35,6 +49,7 @@ public enum ChargerProduct: String, Codable, CaseIterable, Sendable, Equatable {
         switch self {
         case .a2687: return L10n.text("蓝牙直连", table: "Core")
         case .a2345: return L10n.text("Wi-Fi 云端", table: "Core")
+        case .a25x7: return L10n.text("蓝牙直连 · 实验性", table: "Core")
         }
     }
 }
@@ -62,6 +77,22 @@ public enum ChargerPortID: Int, Codable, CaseIterable, Sendable, Equatable, Hash
         case .c4: return "C4"
         case .a1: return "A1"
         case .a2: return "A2"
+        }
+    }
+
+    /// Name to print for this slot on `product`.
+    ///
+    /// A25X7 reuses the first three stable slots so energy history and the
+    /// menu bar keep their indexes, but those slots are wireless pads. Public
+    /// evidence disagrees about phone / watch / earbuds, so the label stays
+    /// “pad 1/2/3”.
+    public func readoutLabel(for product: ChargerProduct) -> String {
+        guard product == .a25x7 else { return label }
+        switch self {
+        case .c1: return L10n.text("充电位 1", table: "Core")
+        case .c2: return L10n.text("充电位 2", table: "Core")
+        case .c3: return L10n.text("充电位 3", table: "Core")
+        case .c4, .a1, .a2: return label
         }
     }
 
@@ -98,6 +129,10 @@ public struct ChargerPortReading: Sendable, Equatable, Identifiable {
     public var cable: PortCable?
     public var fastCharge: PortFastCharge?
     public var deviceBrand: PortDeviceBrand?
+    /// A25X7 reports watts and a status byte. The two integers beside the
+    /// power word do not have a confirmed unit, so voltage and current stay
+    /// zero and delivery is decided from power instead of from volts × amps.
+    public var infersDeliveryFromPower: Bool
 
     public init(
         port: ChargerPortID,
@@ -109,7 +144,8 @@ public struct ChargerPortReading: Sendable, Equatable, Identifiable {
         usbProductID: UInt16? = nil,
         cable: PortCable? = nil,
         fastCharge: PortFastCharge? = nil,
-        deviceBrand: PortDeviceBrand? = nil
+        deviceBrand: PortDeviceBrand? = nil,
+        infersDeliveryFromPower: Bool = false
     ) {
         self.port = port
         self.statusCode = statusCode
@@ -121,11 +157,18 @@ public struct ChargerPortReading: Sendable, Equatable, Identifiable {
         self.cable = cable
         self.fastCharge = fastCharge
         self.deviceBrand = deviceBrand
+        self.infersDeliveryFromPower = infersDeliveryFromPower
     }
 
     public var isOn: Bool { statusCode != 0 }
-    public var isDelivering: Bool { isOn && current > 0.02 && voltage > 3 }
-    public var hasReadings: Bool { isOn && (voltage > 0 || current > 0 || power > 0) }
+    public var isDelivering: Bool {
+        if infersDeliveryFromPower { return isOn && power > 0 }
+        return isOn && current > 0.02 && voltage > 3
+    }
+    public var hasReadings: Bool {
+        if infersDeliveryFromPower { return isOn || power > 0 }
+        return isOn && (voltage > 0 || current > 0 || power > 0)
+    }
 }
 
 /// Cable rating the mainland A2345 detects on a USB-C port.

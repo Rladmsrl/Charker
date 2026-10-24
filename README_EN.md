@@ -1,7 +1,7 @@
 <div align="center">
   <img src="Resources/Screenshots/app-icon-rounded.png" width="128" alt="Charker icon" />
   <h1>Charker</h1>
-  <p><strong>Monitor and control the Anker Prime 160W and 250W from your Mac.</strong></p>
+  <p><strong>Monitor and control the Anker Prime 160W, 250W, and an experimental wireless charging pad from your Mac.</strong></p>
   <p><a href="README.md">简体中文</a> · English</p>
   <p>
     <a href="https://github.com/qzz0518/Charker/stargazers"><img src="https://img.shields.io/github/stars/qzz0518/Charker?style=flat-square" alt="GitHub Stars" /></a>
@@ -16,17 +16,23 @@
   <img src="Resources/Screenshots/overview.png" width="1100" alt="Charker overview with live power, the 3D device, port status, and power timeline" />
 </p>
 
-Charker is an unofficial macOS app for the **Anker Prime 160W (A2687)** and **Anker Prime Charger 250W (A2345)**.
-The 160W connects directly over Bluetooth; the 250W connects through your Anker account over Wi-Fi.
+Charker is an unofficial macOS app for the **Anker Prime 160W (A2687)**, **Anker Prime Charger 250W (A2345)**,
+and **Anker Prime wireless charging pad (A25X7, experimental)**.
+The 160W and the wireless pad connect directly over Bluetooth; the 250W connects through your Anker account over Wi-Fi.
 
 > [!IMPORTANT]
 > Charker is an independent project, not affiliated with or endorsed by Anker. Readings are verified on a
 > 160W (Bluetooth firmware `v0.0.5.2`) and a 250W (firmware `2.1.1.6`). Of the controls, the 160W's display
 > settings and the 250W's port on/off are verified on hardware; the rest are not yet.
+>
+> A25X7 support is an experimental Bluetooth connection and live power for three pads. The decoder and the
+> subscribe command `A1 01 21` were checked against public SolixBLE captures. **This Charker port has not
+> been accepted on hardware.** Screen brightness, charge mode, and switches are omitted because the evidence
+> is not sufficient. Pads are labeled 1/2/3: public notes disagree about which slot is a phone, a watch, or earbuds.
 
 ## Features
 
-- **Live overview**: voltage, current, and power for each port, a 3D model of the charger, and a power chart.
+- **Live overview**: voltage, current, and power for each port, a 3D model of the charger, and a power chart. A25X7 shows power for three pads and the total, without unconfirmed voltage or current.
 - **Menu bar**: total or per-port power without the main window, in a layout you choose.
 - **Energy and cost**: energy use and cost by day, week, or month, with CSV / JSON export.
 - **Device controls**
@@ -56,7 +62,11 @@ and may not show up while another device is connected), then choose the charger 
 Anker account under **Devices & Connection**. Choose JP for a Japanese account; mainland China accounts
 sign in with an SMS code.
 
-On either charger, turn on **Allow Port Switching** in **Advanced** before controlling ports.
+**Wireless pad A25X7 (Bluetooth, experimental)**: quit the official app, choose this model during setup, then
+connect under **Devices & Connection**. Enter the Anker account ID that owns it if asked. The screen shows
+power for Pad 1/2/3 only. Apple Home, screen brightness, and charge mode are not available for this model.
+
+On the 160W or 250W, turn on **Allow Port Switching** in **Advanced** before controlling ports.
 
 **Apple Home**: turn on **Connect to Apple Home** in **Apple Home**, then scan the code with the Home app on
 iPhone. When it says the accessory isn't certified, choose **Add Anyway**. The whole charger (with total
@@ -66,7 +76,7 @@ currently selected in Charker updates in Home.
 
 ## Privacy
 
-- 160W data travels over local Bluetooth; 250W data and controls travel encrypted through the Anker cloud.
+- 160W and A25X7 data travel over local Bluetooth; 250W data and controls travel encrypted through the Anker cloud. A25X7 power stays on the live chart for that connection and is not written into the 160W energy archive.
 - **Connect to Apple Home** is off by default. When on, port states and power go encrypted over your local
   network to your Home.
 - Energy history and settings stay on this Mac. There is no Charker server and no usage data collection.

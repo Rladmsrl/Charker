@@ -6,13 +6,13 @@ import SwiftUI
 // MARK: - Item presentation metadata
 
 extension MenuBarItem {
-    var typeTitle: String {
+    func typeTitle(for product: ChargerProduct = .a2687) -> String {
         switch kind {
         case .totalPower: return L10n.text("总功率")
         case .portPower:
             return L10n.format(
                 "%@ 功率",
-                port.flatMap(ChargerPortID.init(rawValue:))?.label ?? L10n.text("端口")
+                port.flatMap(ChargerPortID.init(rawValue:))?.readoutLabel(for: product) ?? L10n.text("端口")
             )
         case .portsCount: return L10n.text("输出端口数")
         case .state: return L10n.text("连接状态")
@@ -162,7 +162,8 @@ struct MenuBarSettingsView: View {
             deviceName: model.activeDisplayName,
             defaultDecimals: model.preferences.decimals,
             hideIdlePorts: false,
-            portNicknames: model.preferences.portNicknames
+            portNicknames: model.preferences.portNicknames,
+            product: model.activeProduct
         )
         return rendered.isEmpty ? L10n.text("用这个组合替换当前布局") : rendered
     }
@@ -345,10 +346,11 @@ struct MenuBarSettingsView: View {
             defaultDecimals: model.preferences.decimals,
             hideIdlePorts: false,
             portNicknames: model.preferences.portNicknames,
+            product: model.activeProduct,
             // Padded like the status item (StatusItemController), so the chip
             // holds still at 9.9 → 10.0 W.
             figureDigits: model.preferences.compactMenuBar ? 1 : max(2, model.statusFigureDigits)
-        ) ?? item.typeTitle
+        ) ?? item.typeTitle(for: model.activeProduct)
 
         return Text(text)
             .font(.system(size: 12))
@@ -393,7 +395,7 @@ struct MenuBarSettingsView: View {
                 Divider()
                 Button("移除", role: .destructive) { remove(item.id) }
             }
-            .accessibilityLabel(Text(L10n.format("%@，当前显示 %@", item.typeTitle, text)))
+            .accessibilityLabel(Text(L10n.format("%@，当前显示 %@", item.typeTitle(for: model.activeProduct), text)))
             .accessibilityHint(Text("点按选中，按住拖动排序"))
             .accessibilityAddTraits(isSelected ? .isSelected : [])
             .accessibilityAction(named: "移除") { remove(item.id) }
@@ -462,6 +464,7 @@ struct MenuBarSettingsView: View {
         } else if let item = selectedItem {
             ItemInspector(
                 item: item,
+                product: model.activeProduct,
                 isFirst: items.first?.id == item.id,
                 isLast: items.last?.id == item.id,
                 globalDecimals: model.preferences.decimals,
@@ -618,7 +621,8 @@ private struct PaletteView: View {
             deviceName: model.activeDisplayName,
             defaultDecimals: model.preferences.decimals,
             hideIdlePorts: false,
-            portNicknames: model.preferences.portNicknames
+            portNicknames: model.preferences.portNicknames,
+            product: model.activeProduct
         )
         return Button {
             insert(item)
@@ -628,7 +632,7 @@ private struct PaletteView: View {
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(taken ? Palette.textTertiary : Palette.accentText)
                     .frame(width: 16)
-                Text(item.typeTitle)
+                Text(item.typeTitle(for: model.activeProduct))
                     .font(Typo.body)
                     .foregroundStyle(taken ? Palette.textTertiary : Palette.textPrimary)
                 Spacer(minLength: Space.s)
@@ -674,6 +678,7 @@ private struct PaletteRowStyle: ButtonStyle {
 /// blocking sheet. Only rows the component actually supports.
 private struct ItemInspector: View {
     let item: MenuBarItem
+    let product: ChargerProduct
     let isFirst: Bool
     let isLast: Bool
     let globalDecimals: Int
@@ -688,7 +693,7 @@ private struct ItemInspector: View {
         guard let port = item.port else { return "" }
         let nickname = port < portNicknames.count ? portNicknames[port] : ""
         return nickname.isEmpty
-            ? (ChargerPortID(rawValue: port)?.label ?? L10n.text("端口"))
+            ? (ChargerPortID(rawValue: port)?.readoutLabel(for: product) ?? L10n.text("端口"))
             : nickname
     }
 
@@ -698,7 +703,7 @@ private struct ItemInspector: View {
                 Image(systemName: item.typeSymbol)
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(Palette.accentText)
-                Text(item.typeTitle).font(Typo.heading).foregroundStyle(Palette.textPrimary)
+                Text(item.typeTitle(for: product)).font(Typo.heading).foregroundStyle(Palette.textPrimary)
                 Spacer(minLength: Space.m)
                 Button { move(-1) } label: { Image(systemName: "chevron.left") }
                     .disabled(isFirst)
